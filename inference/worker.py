@@ -1,90 +1,36 @@
-"""Persistent JSON-lines inference worker for the Node/Express API."""
+"""Persistent JSON-lines bridge to the bundled canonical inference engine.
+
+The React application uses ``bert`` as its public model id. The canonical
+inference implementation calls the same model ``banglabert``; this worker is
+the only compatibility layer between those two interfaces.
+"""
 
 from __future__ import annotations
 
-import hashlib
-import importlib.util
 import json
 import sys
 from pathlib import Path
 from typing import Any
 
-import numpy as np
-import torch
+
+INFERENCE_ROOT = Path(__file__).resolve().parent
+REFERENCE_SOURCE = INFERENCE_ROOT / "src"
+REFERENCE_CACHE = INFERENCE_ROOT / "embeddings" / "cache"
+
+if not REFERENCE_SOURCE.is_dir():
+    raise FileNotFoundError(f"Canonical inference source is missing: {REFERENCE_SOURCE}")
+
+# predict.py deliberately imports its sibling modules by their top-level names.
+sys.path.insert(0, str(REFERENCE_SOURCE))
+
+from predict import PunctuationRestorer  # noqa: E402
 
 
-ROOT = Path(__file__).resolve().parent.parent
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-MODELS: dict[str, Any] = {}
-
-
-def import_module(name: str, source: Path):
-    spec = importlib.util.spec_from_file_location(name, source)
-    if spec is None or spec.loader is None:
-        raise ImportError(f"Unable to import {source}")
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[name] = module
-    spec.loader.exec_module(module)
-    return module
-
-
-def checkpoint_state(checkpoint: Any) -> dict[str, torch.Tensor]:
-    if not isinstance(checkpoint, dict):
-        return checkpoint
-    for key in ("model_state", "model_state_dict"):
-        if key in checkpoint:
-            return checkpoint[key]
-    return checkpoint
-
-
-def load_model(model_name: str):
-    if model_name in MODELS:
-        return MODELS[model_name]
-
-    if model_name == "bert":
-        module = import_module("punctuation_bert_model", ROOT / "bert" / "model.py")
-        model = module.AlignedBanglaBERTPunctuation(
-            load_pretrained_backbone=False,
-        ).to(DEVICE)
-        checkpoint_path = ROOT / "bert" / "model" / "best.pt"
-        checkpoint = torch.load(checkpoint_path, map_location=DEVICE, weights_only=False)
-        model.load_state_dict(checkpoint_state(checkpoint))
-        del checkpoint
-        model.eval()
-        MODELS[model_name] = (model, None)
-    elif model_name == "bilstm":
-        module = import_module("punctuation_bilstm_model", ROOT / "bilstm" / "model.py")
-        model = module.PackedBiLSTMPunctuation().to(DEVICE)
-        checkpoint_path = ROOT / "bilstm" / "model" / "best_bilstm_punct.pt"
-        checkpoint = torch.load(checkpoint_path, map_location=DEVICE, weights_only=False)
-        model.load_state_dict(checkpoint_state(checkpoint))
-        del checkpoint
-        model.eval()
-        embeddings_loaded = model.load_embeddings()
-
-        embedding_cache: dict[str, np.ndarray] = {}
-
-        def word_vector(word: str) -> np.ndarray:
-            if embeddings_loaded:
-                return model.get_word_vector(word)
-            if word not in embedding_cache:
-                seed = int(hashlib.sha256(word.encode("utf-8")).hexdigest()[:8], 16)
-                generator = np.random.RandomState(seed)
-                embedding_cache[word] = generator.normal(0.0, 0.1, 300).astype(np.float32)
-            return embedding_cache[word]
-
-        MODELS[model_name] = (model, word_vector)
-    else:
-        raise ValueError("Unknown model selection.")
-
-    return MODELS[model_name]
-
-
-def restore(text: str, model_name: str) -> str:
-    model, word_vector = load_model(model_name)
-    if model_name == "bert":
-        return model.restore_punctuation(text, device=DEVICE)
-    return model.restore_punctuation(text, word2vec_fn=word_vector, device=DEVICE)
+PUBLIC_TO_REFERENCE_MODEL = {
+    "bert": "banglabert",
+    "banglabert": "banglabert",
+    "bilstm": "bilstm",
+}
 
 
 def respond(payload: dict[str, Any]) -> None:
@@ -93,6 +39,19 @@ def respond(payload: dict[str, Any]) -> None:
 
 
 def main() -> None:
+    # Eagerly load the default BanglaBERT checkpoint and lazily cache the
+    # BiLSTM on first use.
+    restorer = PunctuationRestorer(
+        default_model="banglabert",
+        cache_dir=REFERENCE_CACHE,
+        device="auto",
+    )
+    respond({
+        "status": "ready",
+        "device": str(restorer.device),
+        "default_model": "banglabert",
+    })
+
     for raw_line in sys.stdin:
         request_id = None
         try:
@@ -101,13 +60,21 @@ def main() -> None:
             if request.get("action") != "restore":
                 raise ValueError("Unsupported inference action.")
 
-            text = str(request.get("text", "")).strip()
-            model_name = request.get("model")
-            if not text:
-                raise ValueError("Input text is empty.")
+            text = request.get("text")
+            public_model = request.get("model")
+            reference_model = PUBLIC_TO_REFERENCE_MODEL.get(public_model)
+            if reference_model is None:
+                raise ValueError("Model must be either bert or bilstm.")
 
-            output = restore(text, model_name)
-            respond({"id": request_id, "output": output})
+            result = restorer.restore_punctuation(
+                text=text,
+                model_name=reference_model,
+                method=request.get("method", "constrained"),
+                beam_width=request.get("beam_width", 8),
+                beta=request.get("beta", 0.3),
+            )
+            result["id"] = request_id
+            respond(result)
         except Exception as error:  # Keep the worker alive for future requests.
             respond({"id": request_id, "error": f"{type(error).__name__}: {error}"})
 
