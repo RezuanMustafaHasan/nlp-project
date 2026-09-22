@@ -1,0 +1,15 @@
+{
+  "id": "banglabert_aligned_weighted_s42",
+  "family": "banglabert",
+  "seed": 42,
+  "initial_checkpoint": "checkpoints/revision_l4_50h/banglabert/seed_42/best.pt",
+  "pretrained_model": "csebuetnlp/banglabert",
+  "pretrained_revision": "9ce791f330578f50da6bc52b54205166fb5d1c8c",
+  "epochs": 3,
+  "batch_size": 32,
+  "learning_rate": 1e-05,
+  "weight_power": 0.5,
+  "weight_cap": 6.0,
+  "span_lambda": 0.0,
+  "patience": 2
+}
