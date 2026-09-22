@@ -77,18 +77,18 @@
 \vspace{10mm}
 {\Large\bfseries Project Report on\par}
 \vspace{4mm}
-{\LARGE\bfseries A Lightweight Bangla Review Analytics\par}
+{\LARGE\bfseries Bangla Punctuation Restoration Using BERT and BiLSTM\par}
 \vspace{1.5mm}
-{\LARGE\bfseries Platform for E-Commerce Sellers\par}
+% {\LARGE\bfseries Platform for E-Commerce Sellers\par}
 
 \vspace{13mm}
 {\Large\bfseries Submitted by:\par}
 \vspace{3mm}
-{\large\bfseries Saleheen Uddin Sakin, 2107103\par}
+{\large\bfseries MD Rahul Sheikh, 2107063\par}
 \vspace{1.5mm}
-{\large\bfseries Sree Shuvo Kumar Joy, 2107116\par}
+{\large\bfseries Rezuan Mustafa Hasan, 2107075\par}
 \vspace{3mm}
-{\large\bfseries Year: 4th \qquad Term: 2nd\par}
+{\large\bfseries Year: 4th \qquad Term: 1st\par}
 
 \vspace{10mm}
 {\Large\bfseries Submitted to:\par}
@@ -100,7 +100,7 @@
 {\normalsize Assistant Professor, Department of Computer Science and Engineering\par}
 
 \vfill
-{\large\textbf{Date of Submission:} September 20, 2026\par}
+{\large\textbf{Date of Submission:} September 23, 2026\par}
 \vspace{8mm}
 \end{center}
 \end{titlepage}
@@ -212,23 +212,6 @@ Checkpoint size in this project & 422.1 MiB & 8.4 MiB \\
 % -----------------------------------------------------------------------------
 \section{Evaluation and Results}
 The reported measures answer different questions. \textit{Macro-F1} averages F1 equally across the eight punctuation symbols, so rare marks matter. \textit{Micro-F1} combines all decisions and is influenced by frequent marks. \textit{Ordered exact match} requires a complete sentence's predicted gap sequences to match the gold annotation. Parenthesis span F1 evaluates correctly paired opening and closing boundaries. The false-parenthesis rate counts negative sentences that incorrectly receive parentheses, normalized per 1,000 negatives.
-
-\begin{table}[h]
-\centering
-\caption{Overall results. Values are percentages except the final rate.}
-\small
-\begin{tabular}{@{}llrrrrr@{}}
-\toprule
-\textbf{Split} & \textbf{Model} & \textbf{Macro-F1} & \textbf{Micro-F1} & \textbf{Exact} & \textbf{Span-F1} & \textbf{False paren/1k} \\
-\midrule
-Validation & BanglaBERT & \textbf{68.58} & \textbf{93.05} & \textbf{83.74} & \textbf{73.30} & \textbf{1.964} \\
-Validation & BiLSTM & 50.32 & 89.61 & 77.81 & 40.34 & 9.495 \\
-\addlinespace
-Retained benchmark & BanglaBERT & \textbf{68.93} & \textbf{92.96} & \textbf{83.46} & \textbf{74.89} & \textbf{1.687} \\
-Retained benchmark & BiLSTM & 52.05 & 89.77 & 77.93 & 43.01 & 9.088 \\
-\bottomrule
-\end{tabular}
-\end{table}
 
 The validation set contains 37,044 sentences. The retained benchmark contains 185,370 sentences, but the supplied benchmark report identifies it as reused exploratory evaluation rather than an untouched final test set. Consequently, these values support comparison between the frozen candidates under the same scoring contract, but they should not be presented as a new unbiased generalization estimate.
 

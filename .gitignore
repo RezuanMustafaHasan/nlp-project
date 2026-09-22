@@ -21,9 +21,6 @@ ENV/
 model/
 checkpoints/
 
-# Canonical runtime checkpoints are versioned through Git LFS.
-!inference/models/**/*.pt
-
 # Node dependencies and frontend builds
 node_modules/
 client/dist/
@@ -48,3 +45,7 @@ logs/
 .DS_Store
 Thumbs.db
 Desktop.ini
+ui/
+
+# Local project explanation documents
+EXPLANATIONS/
