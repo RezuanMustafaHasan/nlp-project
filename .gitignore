@@ -49,3 +49,7 @@ ui/
 
 # Local project explanation documents
 EXPLANATIONS/
+
+*.csv
+*.jsonl
+data/data/manifests/
