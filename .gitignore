@@ -1,3 +1,47 @@
+# Python bytecode and caches
 __pycache__/
-model/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Python environments
+venv/
+.venv/
+env/
+ENV/
+
+# PyTorch checkpoints and generated model directories
 *.pt
+*.pth
+*.ckpt
+model/
+checkpoints/
+
+# Node dependencies and frontend builds
+node_modules/
+client/dist/
+dist/
+coverage/
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+
+# Logs and runtime files
+*.log
+logs/
+*.pid
+
+# Editors and operating systems
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+Desktop.ini

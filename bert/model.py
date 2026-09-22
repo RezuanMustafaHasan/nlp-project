@@ -115,6 +115,7 @@ class AlignedBanglaBERTPunctuation(nn.Module):
         num_classes: int = NUM_CLASSES,
         max_slots: int = MAX_SLOTS_PER_GAP,
         dropout: float = 0.1,
+        load_pretrained_backbone: bool = True,
     ):
         super().__init__()
         self.pretrained_model_name = pretrained_model_name
@@ -124,7 +125,14 @@ class AlignedBanglaBERTPunctuation(nn.Module):
 
         # 1. Contextual Encoder (BanglaBERT ELECTRA discriminator)
         self.config = AutoConfig.from_pretrained(pretrained_model_name)
-        self.encoder = AutoModel.from_pretrained(pretrained_model_name, config=self.config)
+        # Inference checkpoints already contain the full encoder state. Building
+        # from config avoids downloading a duplicate 400+ MB backbone before the
+        # local .pt weights are loaded.
+        self.encoder = (
+            AutoModel.from_pretrained(pretrained_model_name, config=self.config)
+            if load_pretrained_backbone
+            else AutoModel.from_config(self.config)
+        )
         self.hidden_dim = self.config.hidden_size  # 768 for banglabert-base
 
         # 2. Learned BOS and EOS boundary embeddings
