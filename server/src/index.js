@@ -35,15 +35,19 @@ if (process.env.MONGO_URI) {
 }
 
 app.get("/api/health", (_request, response) => {
-  const checkpoints = {
-    bert: existsSync(path.join(projectRoot, "bert", "model", "best.pt")),
-    bilstm: existsSync(path.join(projectRoot, "bilstm", "model", "best_bilstm_punct.pt")),
+  const assets = {
+    bertCheckpoint: existsSync(path.join(projectRoot, "inference", "models", "banglabert", "best.pt")),
+    bilstmCheckpoint: existsSync(path.join(projectRoot, "inference", "models", "bilstm", "best.pt")),
+    vocabulary: existsSync(path.join(projectRoot, "inference", "embeddings", "cache", "word2id.json")),
+    vectors: existsSync(path.join(projectRoot, "inference", "embeddings", "cache", "vocab_vectors.npy")),
   };
 
-  const healthy = modelWorker.active && checkpoints.bert && checkpoints.bilstm;
+  const healthy = modelWorker.active && Object.values(assets).every(Boolean);
   response.status(healthy ? 200 : 503).json({
-    status: healthy ? "ready" : "unavailable",
-    checkpoints,
+    status: healthy ? (modelWorker.ready ? "ready" : "initializing") : "unavailable",
+    inferenceReady: modelWorker.ready,
+    device: modelWorker.device,
+    assets,
     database: databaseState,
   });
 });
@@ -56,8 +60,8 @@ app.post("/api/restore", async (request, response) => {
     return response.status(400).json({ message: "Bangla input text is required." });
   }
 
-  if (text.length > 1500 || text.split(/\s+/u).length > 180) {
-    return response.status(400).json({ message: "Input must be no more than 1,500 characters and 180 words." });
+  if (text.length > 1500 || text.split(/\s+/u).length > 128) {
+    return response.status(400).json({ message: "Input must be no more than 1,500 characters and 128 words." });
   }
 
   if (!["bert", "bilstm"].includes(model)) {
@@ -67,14 +71,39 @@ app.post("/api/restore", async (request, response) => {
   const startedAt = Date.now();
 
   try {
-    const result = await modelWorker.request({ action: "restore", text, model });
+    const result = await modelWorker.request({
+      action: "restore",
+      text,
+      model,
+      method: "constrained",
+      beam_width: 8,
+      beta: 0.3,
+    });
     const durationMs = Date.now() - startedAt;
 
-    if (mongoose.connection.readyState === 1) {
-      Restoration.create({ input: text, output: result.output, model, durationMs }).catch(() => {});
+    if (result.error) {
+      return response.status(422).json({ message: result.error });
     }
 
-    return response.json({ output: result.output, model, durationMs });
+    if (mongoose.connection.readyState === 1) {
+      Restoration.create({ input: text, output: result.restored_text, model, durationMs }).catch(() => {});
+    }
+
+    return response.json({
+      output: result.restored_text,
+      model,
+      durationMs,
+      inference: {
+        modelName: result.model_name,
+        modelDisplay: result.model_display,
+        method: result.method,
+        words: result.num_words,
+        marks: result.num_marks,
+        parenthesisSpans: result.parenthesis_spans,
+        validSyntax: result.is_valid_syntax,
+        latencyMs: result.latency_ms,
+      },
+    });
   } catch (error) {
     console.error(`${model} inference failed:`, error.message);
     return response.status(500).json({ message: error.message || "Model inference failed." });
@@ -91,9 +120,12 @@ const server = app.listen(port, "127.0.0.1", () => {
   console.log(`API listening at http://127.0.0.1:${port}`);
 });
 
+let shuttingDown = false;
 function shutdown() {
-  modelWorker.stop();
-  mongoose.disconnect().finally(() => server.close());
+  if (shuttingDown) return;
+  shuttingDown = true;
+  server.close();
+  void Promise.allSettled([modelWorker.stop(), mongoose.disconnect()]);
 }
 
 process.on("SIGINT", shutdown);
